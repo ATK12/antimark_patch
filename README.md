@@ -4,6 +4,21 @@ AntiMark 内核级反指纹补丁（AntiMark Kernel Patches）
 
 设备指纹对抗方案的内核侧实现，用户态配套（`antimark_ctl` / drmid 模块）不属于本仓库。
 
+## 鸣谢
+
+本项目的编译链路深度依赖 [cctv18](https://github.com/cctv18) 的开源工作：
+
+- [android_gki_kernel_common](https://github.com/cctv18/android_gki_kernel_common)：GKI OKI 内核源码仓库
+- [oneplus_sm8650_toolchain](https://github.com/cctv18/oneplus_sm8650_toolchain)：LLVM-Clang 工具链（clang/rust/build-tools）
+- [susfs4oki](https://github.com/cctv18/susfs4oki)：SUSFS 补丁（0002 补丁的 CONFIG_KSU_SUSFS 依赖）
+- [AnyKernel3](https://github.com/cctv18/AnyKernel3)：刷机包打包框架
+- [Baseband-guard](https://github.com/cctv18/Baseband-guard)：内核级基带保护
+- [KPatch-Next](https://github.com/cctv18/KPatch-Next)：KPM 支持
+- public_ccache：公共 ccache 缓存加速
+- oppo_oplus_realme_sm8850 / sm8750 / sm8650：本方案所基于的编译 workflow 均 fork 自 cctv18 的仓库
+
+再次感谢 cctv18 的持续维护与开源。
+
 ## 原理（三块）
 
 | 补丁 | 位置 | 作用 |
@@ -117,3 +132,4 @@ strings Image | grep -cE 'susfs_[a-z_]+'    # 应 ≥ 100
 ## License
 
 GPL-2.0（内核模块）
+
