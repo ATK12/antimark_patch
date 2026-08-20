@@ -1,0 +1,24 @@
+--- a/fs/open.c	2026-08-20 07:13:27.485887563 +0000
++++ b/fs/open.c	2026-08-20 07:16:11.489887688 +0000
+@@ -33,6 +33,7 @@
+ #include <linux/dnotify.h>
+ #include <linux/compat.h>
+ #include <linux/mnt_idmapping.h>
++#include <linux/antimark.h>
+ #include <linux/filelock.h>
+ 
+ #include "internal.h"
+@@ -1064,6 +1065,13 @@
+ int vfs_open(const struct path *path, struct file *file)
+ {
+ 	file->f_path = *path;
++#ifdef CONFIG_ANTIMARK
++	/* AntiMark: 文件伪装 —— dentry 命中假表则掉包为 shmem 假文件（无挂载痕迹） */
++	if (antimark_fake_open_check(path, file)) {
++		fsnotify_open(file);
++		return 0;
++	}
++#endif
+ 	return do_dentry_open(file, d_backing_inode(path->dentry), NULL);
+ }
+ 

@@ -1,0 +1,24 @@
+--- a/fs/open.c
++++ b/fs/open.c
+@@ -32,6 +32,7 @@
+ #include <linux/dnotify.h>
+ #include <linux/compat.h>
+ #include <linux/mnt_idmapping.h>
++#include <linux/antimark.h>
+ #include <linux/filelock.h>
+ #ifdef CONFIG_KSU_SUSFS
+ #include <linux/susfs_def.h>
+@@ -1110,6 +1111,13 @@
+ 	int ret;
+ 
+ 	file->f_path = *path;
++#ifdef CONFIG_ANTIMARK
++	/* AntiMark: 文件伪装 —— dentry 命中假表则掉包为 shmem 假文件（无挂载痕迹） */
++	if (antimark_fake_open_check(path, file)) {
++		fsnotify_open(file);
++		return 0;
++	}
++#endif
+ 	ret = do_dentry_open(file, NULL);
+ 	if (!ret) {
+ 		/*

@@ -1,0 +1,25 @@
+diff --git a/KernelSU/kernel/supercall/dispatch.c b/KernelSU/kernel/supercall/dispatch.c
+--- a/KernelSU/kernel/supercall/dispatch.c
++++ b/KernelSU/kernel/supercall/dispatch.c
+@@ -7,6 +7,7 @@
+ #include <linux/version.h>
+ #ifdef CONFIG_KSU_SUSFS
+ #include <linux/susfs_def.h>
++#include <linux/antimark.h>
+ #endif
+ 
+ #include <linux/thread_info.h>
+@@ -1059,6 +1060,12 @@ int ksu_handle_susfs_cmd(int cmd, void __user **arg)
+     case CMD_SUSFS_SHOW_VERSION: {
+         susfs_show_version(arg);
+         return 0;
+     }
++#ifdef CONFIG_ANTIMARK
++    case CMD_ANTIMARK_SET: {
++        antimark_handle_cmd(arg);
++        return 0;
++    }
++#endif
+     }
+     return 0;
+ }

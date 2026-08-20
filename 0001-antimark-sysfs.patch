@@ -1,0 +1,28 @@
+diff --git a/fs/sysfs/file.c b/fs/sysfs/file.c
+--- a/fs/sysfs/file.c
++++ b/fs/sysfs/file.c
+@@ -17,3 +17,4 @@
+ #include <linux/seq_file.h>
+ #include <linux/mm.h>
++#include <linux/antimark.h>
+ #include "sysfs.h"
+@@ -56,6 +57,12 @@
+ 	}
+ 	memset(buf, 0, PAGE_SIZE);
+ 
++	/* antimark: 假值表命中直接输出 */
++	count = antimark_sysfs_seq_show(of, buf, PAGE_SIZE);
++	if (count >= 0) {
++		seq_commit(sf, count);
++		return 0;
++	}
+ 	count = ops->show(kobj, of->kn->priv, buf);
+ 	if (count < 0)
+ 		return count;
+diff --git a/fs/Makefile b/fs/Makefile
+--- a/fs/Makefile
++++ b/fs/Makefile
+@@ -139,2 +139,3 @@
+ obj-$(CONFIG_ZONEFS_FS)		+= zonefs/
+ obj-$(CONFIG_BPF_LSM)		+= bpf_fs_kfuncs.o
++obj-$(CONFIG_ANTIMARK)		+= antimark.o
