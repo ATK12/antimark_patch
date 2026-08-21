@@ -1,8 +1,8 @@
 # antimark_patch
 
-AntiMark 内核级反指纹补丁（AntiMark Kernel Patches）
+面向 GKI 内核（6.12 / 6.6 / 6.1）的内核补丁实验集合，基于 KernelSU / SUSFS 演示若干内核机制：sysfs 显示定制、KernelSU supercall 扩展、VFS 文件访问重定向。
 
-内核侧实现，用户态配套（`antimark_ctl` / drmid 模块）不属于本仓库。
+用户态配套工具与模块不属于本仓库。
 
 ## 鸣谢
 
@@ -17,15 +17,15 @@ AntiMark 内核级反指纹补丁（AntiMark Kernel Patches）
 - public_ccache：公共 ccache 缓存
 - oppo_oplus_realme_sm8850 / sm8750 / sm8650：编译 workflow 均 fork 自 cctv18 的仓库
 
-## 原理
+## 补丁
 
-| 补丁 | 位置 | 作用 |
+| 补丁 | 位置 | 说明 |
 |------|------|------|
-| 0001 | `fs/sysfs/file.c` + `fs/Makefile` | sysfs 假值表：`antimark_sysfs_seq_show()` 命中路径直接输出假值，不落盘 |
-| 0002 | `KernelSU/kernel/supercall/dispatch.c` | KSU supercall 分发：`CMD_ANTIMARK_SET (0x555d0)` 路由到 `antimark_handle_cmd()` 注册掉包表 |
-| 0003 | `fs/open.c` | `vfs_open()` 文件掉包：命中假表路径时把 `filp` 换成 shmem 假文件（无挂载，`/proc/mounts` 无痕迹） |
+| 0001 | `fs/sysfs/file.c` + `fs/Makefile` | sysfs 显示定制：`antimark_sysfs_seq_show()` 命中路径直接输出定制内容，不落盘 |
+| 0002 | `KernelSU/kernel/supercall/dispatch.c` | KSU supercall 扩展：`CMD_ANTIMARK_SET (0x555d0)` 路由到 `antimark_handle_cmd()` 注册表项 |
+| 0003 | `fs/open.c` | VFS 访问重定向实验：命中表项路径时把 `filp` 换为内存文件（无挂载，`/proc/mounts` 无痕迹） |
 
-调用链：用户态 `antimark_ctl` → reboot supercall（magic1=`0xdeadbeef`, magic2=`0xfafafafa`, cmd=`0x555d0`）→ `ksu_handle_susfs_cmd()` → `antimark_handle_cmd()` 注册 → `vfs_open()` 命中掉包。
+调用链：用户态程序 → reboot supercall（magic1=`0xdeadbeef`, magic2=`0xfafafafa`, cmd=`0x555d0`）→ `ksu_handle_susfs_cmd()` → `antimark_handle_cmd()` 注册 → `vfs_open()` 命中重定向。
 
 ## 文件清单
 
@@ -48,7 +48,7 @@ antimark_patch/
 - 集成 KernelSU / ReSukiSU（0002 改 `KernelSU/kernel/supercall/dispatch.c`）
 - 开启 SUSFS（`CONFIG_KSU_SUSFS=y`）
 
-`CONFIG_KSU_SUSFS` 必须为 `y`：`ksu_handle_susfs_cmd()` 整个函数体在 `#ifdef CONFIG_KSU_SUSFS` 内，未开启时被编译器删除，0002 补丁的 `CMD_ANTIMARK_SET` case 随之消失，supercall 返回 0 但不报错，掉包表注册不上（静默失效）。排查：`grep CONFIG_KSU_SUSFS arch/arm64/configs/gki_defconfig`。
+`CONFIG_KSU_SUSFS` 必须为 `y`：`ksu_handle_susfs_cmd()` 整个函数体在 `#ifdef CONFIG_KSU_SUSFS` 内，未开启时被编译器删除，0002 补丁的 `CMD_ANTIMARK_SET` case 随之消失，supercall 返回 0 但不报错，注册表项不生效（静默失效）。排查：`grep CONFIG_KSU_SUSFS arch/arm64/configs/gki_defconfig`。
 
 ## 编入步骤
 
@@ -65,16 +65,14 @@ cp $PATCH/include/linux/antimark.h  $KERNEL/include/linux/antimark.h
 
 ```sh
 cd $KERNEL
-
-# 0001: sysfs 假值表（通用）
+# 0001: sysfs 显示定制（通用）
 patch -p1 -F3 < $PATCH/0001-antimark-sysfs.patch
-
 # 0002: KSU supercall 分发（通用；在 KernelSU 仓库目录下执行）
 cd KernelSU
 patch -p1 -F3 < $PATCH/0002-antimark-dispatch.patch
 cd ..
 
-# 0003: vfs_open 掉包（按内核版本选）
+# 0003: VFS 重定向（按内核版本选）
 # 6.12:
 patch -p1 -F3 < $PATCH/0003-antimark-vfs-fake.patch
 # 6.6 / 6.1:
@@ -97,22 +95,14 @@ make ARCH=arm64 LLVM=1 -j$(nproc) Image
 
 ## 验证
 
+编译产物符号检查：
+
 ```sh
 # antimark 符号
 strings Image | grep -E 'antimark_(handle_cmd|fake_open_check|sysfs_seq_show)'
-
 # susfs 特征（确认 CONFIG_KSU_SUSFS 编进去了）
 strings Image | grep -cE 'susfs_[a-z_]+'    # 应 >= 100
 ```
-
-运行时验证：`antimark_ctl fakefile <目标库> <假库>` 无报错，drmid 检测输出假值。
-
-## 用户态配套（不在本仓库）
-
-- `antimark_ctl`：注册/清理掉包表（子命令 `fakefile` / `fakedel` / `fakeclear` / `token`），走 reboot supercall
-- drmid 模块 `mount.sh`：开机读取 `.mode` → `select.sh` 选模板 → `antimark_ctl fakefile` 注册 → `chcon system_lib_file`
-- 掉包表路径：`/data/adb/antimark/fake/`；默认 token `{0x0d, 0xf0, 0xfe, 0xba}`
-- CMD/OP 定义见 `include/linux/antimark.h`（`CMD_ANTIMARK_SET=0x555d0`，`AM_OP_FILE_FAKE_BEGIN=8` 等）
 
 ## 署名
 
@@ -120,10 +110,10 @@ strings Image | grep -cE 'susfs_[a-z_]+'    # 应 >= 100
 
 ## 已知坑
 
-1. SUSFS 未开 → 掉包静默失效（见前置条件）
+1. SUSFS 未开 → 重定向静默失效（见前置条件）
 2. CI push 触发会跳过 `if: inputs.xxx` 步骤：push 事件没有 inputs，`if: inputs.susfs_enable` 为 false 时整步被跳过。写成 `if: ${{ inputs.susfs_enable != 'false' }}`
 3. 0003 版本混用：6.12 版打 6.6/6.1 编译报错，反之 fuzz 插错位置
-4. antimark.c 与 antimark.h 必须同步：内核表结构 / CMD 号变化会导致用户态 ctl 协议失配
+4. antimark.c 与 antimark.h 必须同步：内核表结构 / CMD 号变化会导致用户态协议失配
 
 ## License
 
